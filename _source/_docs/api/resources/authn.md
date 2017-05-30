@@ -1,4 +1,4 @@
----
+--
 layout: docs_page
 title: Authentication API
 redirect_from: "/docs/api/rest/authn.html"
@@ -957,6 +957,341 @@ curl -v -X POST \
   }
 }
 ~~~
+
+{% beta %}
+### Step up Authentication
+> This API is {% api-lifecycle ea %} and is currently supported only for SAML based apps.
+> You must first enable custom login page for the application.
+
+{% get /app/{{appName}}/{{appInstanceId}}/sso/saml %}
+{% post /app/{{appName}}/{{appInstanceId}}/sso/saml %}
+
+Every step-up transaction starts with user accessing an application. **Password Policy**, **MFA Policy**,  and **Sign-On Policy** are evaluated during primary authentication to determine if the user's password is expired, a factor should be enrolled, or additional verification is required. The [transaction state](#transaction-state) of the response depends on the user's status, group memberships and assigned policies.
+The custom login page is called with stateToken as a request parameter.
+
+For example, if the custom login page is set as "https://login.example.com" then Okta will redirect to "https://login.example.com?stateToken=00BClWr4T-mnIqPV8dHkOQlwEIXxB4LLSfBVt7BxsM".
+To determine the next step, check the [state of the transaction](#get-transaction-state)
+
+- [Step up Authentication without Okta session](#step-up-authentication-without-okta-session)&mdash;[Response Example](#response-example-step-up-authentication-without-okta-session)
+- [Step up Authentication with Okta session](#step-up-authentication-with-okta-session)&mdash;[Response Example](#response-example-step-up-authentication-with-okta-session)
+
+#### Step up authentication without Okta session
+{:.api .api-operation}
+
+
+##### Request Example (to get transaction state)
+{:.api .api-request .api-request-example}
+~~~json
+{
+   "stateToken":"00BClWr4T-mnIqPV8dHkOQlwEIXxB4LLSfBVt7BxsM"
+}
+~~~
+
+##### Response Example 
+{:.api .api-response .api-response-example}
+
+~~~json
+{
+   "stateToken":"00BClWr4T-mnIqPV8dHkOQlwEIXxB4LLSfBVt7BxsM",
+   "type":"SESSION_STEP_UP",
+   "expiresAt":"2017-05-30T22:51:37.000Z",
+   "status":"UNAUTHENTICATED",
+   "_embedded":{
+      "target":{
+         "type":"APP",
+         "name":"salesforce",
+         "label":"Salesforce.com",
+         "_links":{
+            "logo":{
+               "name":"medium",
+               "href":"https://your-domain.okta.com/assets/img/logos/salesforce_logo.dbd7e0b4de118a1dae1c39d60a3c30e5.png",
+               "type":"image/png"
+            }
+         }
+      }
+   },
+   "_links":{
+      "next":{
+         "name":"authenticate",
+         "href":"https://your-domain.okta.com/api/v1/authn",
+         "hints":{
+            "allow":[
+               "POST"
+            ]
+         }
+      }
+   }
+}
+~~~
+
+##### Request Example (to initiate primary authentication)
+{:.api .api-request .api-request-example}
+> Primary authentication has to be completed by using the stateToken passed to custom login page. 
+> Okta Sign On Policy and the related App Sign On Policy will be evaluated after successful primary authentication.
+
+~~~json
+{
+   "stateToken":"00BClWr4T-mnIqPV8dHkOQlwEIXxB4LLSfBVt7BxsM",
+   "username": "dade.murphy@example.com",
+   "password": "correcthorsebatterystaple"
+}
+~~~
+
+##### Response Example (if MFA is not required)
+{:.api .api-response .api-response-example}
+
+> Sign in to the app by following the next link relation.
+
+~~~json
+{
+   "stateToken":"00quAZYqYjXg9DZhS5UzE1wrJuQ6KKb_kzOeH7OGB5",
+   "type":"SESSION_STEP_UP",
+   "expiresAt":"2017-05-30T23:19:40.000Z",
+   "status":"SUCCESS",
+   "_embedded":{
+      "user":{
+         "id":"00ub0oNGTSWTBKOLGLNR",
+         "passwordChanged":"2017-03-29T21:37:25.000Z",
+         "profile":{
+            "login":"dade.murphy@example.com",
+            "firstName":"Dade",
+            "lastName":"Murphy",
+            "locale":"en_US",
+            "timeZone":"America/Los_Angeles"
+         }
+      },
+      "target":{
+         "type":"APP",
+         "name":"salesforce",
+         "label":"Salesforce.com",
+         "_links":{
+            "logo":{
+               "name":"medium",
+               "href":"http://rain.okta1.com:1802/assets/img/logos/salesforce_logo.dbd7e0b4de118a1dae1c39d60a3c30e5.png",
+               "type":"image/png"
+            }
+         }
+      }
+   },
+   "_links":{
+      "next":{
+         "name":"original",
+         "href":"https://your-domain.okta.com/login/step-up/redirect?stateToken=00quAZYqYjXg9DZhS5UzE1wrJuQ6KKb_kzOeH7OGB5",
+         "hints":{
+            "allow":[
+               "GET"
+            ]
+         }
+      }
+   }
+}
+~~~
+
+#### Step up authentication with Okta session
+{:.api .api-operation}
+
+##### Request Example (to get transaction state)
+{:.api .api-request .api-request-example}
+~~~json
+{
+   "stateToken":"00BClWr4T-mnIqPV8dHkOQlwEIXxB4LLSfBVt7BxsM"
+}
+~~~
+
+##### Response Example (Factor Enroll)
+{:.api .api-response .api-response-example}
+
+User is assigned to a **MFA Policy** that requires enrollment during sign-on and must [select a factor to enroll](#enroll-factor) to complete the authentication transaction.
+
+~~~json
+{
+   "stateToken":"00zEfSRIpELrl87ndYiHNkvOEbyEPrBmTYuf9dsGLl",
+   "type":"SESSION_STEP_UP",
+   "expiresAt":"2017-05-30T22:58:09.000Z",
+   "status":"MFA_ENROLL",
+   "_embedded":{
+      "user":{
+         "id":"00ub0oNGTSWTBKOLGLNR",
+         "passwordChanged":"2017-03-29T21:37:25.000Z",
+         "profile":{
+            "login":"dade.murphy@example.com",
+            "firstName":"Dade",
+            "lastName":"Murphy",
+            "locale":"en_US",
+            "timeZone":"America/Los_Angeles"
+         }
+      },
+      "factors":[
+         {
+            "factorType":"sms",
+            "provider":"OKTA",
+            "vendorName":"OKTA",
+            "_links":{
+               "enroll":{
+                  "href":"https://your-domain.okta.com/api/v1/authn/factors",
+                  "hints":{
+                     "allow":[
+                        "POST"
+                     ]
+                  }
+               }
+            },
+            "status":"NOT_SETUP"
+         }
+      ],
+      "target":{
+         "type":"APP",
+         "name":"salesforce",
+         "label":"Salesforce.com",
+         "_links":{
+            "logo":{
+               "name":"medium",
+               "href":"https://your-domain.okta.com/assets/img/logos/salesforce_logo.dbd7e0b4de118a1dae1c39d60a3c30e5.png",
+               "type":"image/png"
+            }
+         }
+      }
+   },
+   "_links":{
+      "cancel":{
+         "href":"https://your-domain.okta.com/api/v1/authn/cancel",
+         "hints":{
+            "allow":[
+               "POST"
+            ]
+         }
+      }
+   }
+}
+~~~
+
+
+##### Response Example (Factor Challenge)
+{:.api .api-response .api-response-example}
+
+User is assigned to a **Sign-On Policy** or **App Sign-On Policy** that requires additional verification and must [select and verify](#verify-factor) a previously enrolled [factor](#factor-object) by `id` to complete the authentication transaction.
+
+~~~json
+{
+   "stateToken":"00POAgFjELRueYUC1p7GFAmrm32EQa2HXw0_YssJ5J",
+   "type":"SESSION_STEP_UP",
+   "expiresAt":"2017-05-30T23:07:00.000Z",
+   "status":"MFA_REQUIRED",
+   "_embedded":{
+      "user":{
+         "id":"00ub0oNGTSWTBKOLGLNR",
+         "passwordChanged":"2017-03-29T21:37:25.000Z",
+         "profile":{
+            "login":"dade.murphy@example.com",
+            "firstName":"Dade",
+            "lastName":"Murphy",
+            "locale":"en_US",
+            "timeZone":"America/Los_Angeles"
+         }
+      },
+      "factors":[
+         {
+            "id":"smsph8F1esz8LlSjo0g3",
+            "factorType":"sms",
+            "provider":"OKTA",
+            "vendorName":"OKTA",
+            "profile":{
+               "phoneNumber":"+1 XXX-XXX-3161"
+            },
+            "_links":{
+               "verify":{
+                  "href":"https://your-domain.okta.com/api/v1/authn/factors/smsph8F1esz8LlSjo0g3/verify",
+                  "hints":{
+                     "allow":[
+                        "POST"
+                     ]
+                  }
+               }
+            }
+         }
+      ],
+      "policy":{
+         "allowRememberDevice":true,
+         "rememberDeviceLifetimeInMinutes":1440,
+         "rememberDeviceByDefault":false
+      },
+      "target":{
+         "type":"APP",
+         "name":"salesforce",
+         "label":"Salesforce.com",
+         "_links":{
+            "logo":{
+               "name":"medium",
+               "href":"https://your-domain.okta.com/assets/img/logos/salesforce_logo.dbd7e0b4de118a1dae1c39d60a3c30e5.png",
+               "type":"image/png"
+            }
+         }
+      }
+   },
+   "_links":{
+      "cancel":{
+         "href":"https://your-domain.okta.com/api/v1/authn/cancel",
+         "hints":{
+            "allow":[
+               "POST"
+            ]
+         }
+      }
+   }
+}
+~~~
+
+##### Response Example (after authentication & MFA are complete)
+{:.api .api-response .api-response-example}
+
+> Sign in to the app by following the next link relation.
+
+~~~json
+{
+   "stateToken":"00quAZYqYjXg9DZhS5UzE1wrJuQ6KKb_kzOeH7OGB5",
+   "type":"SESSION_STEP_UP",
+   "expiresAt":"2017-05-30T23:19:40.000Z",
+   "status":"SUCCESS",
+   "_embedded":{
+      "user":{
+         "id":"00ub0oNGTSWTBKOLGLNR",
+         "passwordChanged":"2017-03-29T21:37:25.000Z",
+         "profile":{
+            "login":"dade.murphy@example.com",
+            "firstName":"Dade",
+            "lastName":"Murphy",
+            "locale":"en_US",
+            "timeZone":"America/Los_Angeles"
+         }
+      },
+      "target":{
+         "type":"APP",
+         "name":"salesforce",
+         "label":"Salesforce.com",
+         "_links":{
+            "logo":{
+               "name":"medium",
+               "href":"http://rain.okta1.com:1802/assets/img/logos/salesforce_logo.dbd7e0b4de118a1dae1c39d60a3c30e5.png",
+               "type":"image/png"
+            }
+         }
+      }
+   },
+   "_links":{
+      "next":{
+         "name":"original",
+         "href":"https://your-domain.okta.com/login/step-up/redirect?stateToken=00quAZYqYjXg9DZhS5UzE1wrJuQ6KKb_kzOeH7OGB5",
+         "hints":{
+            "allow":[
+               "GET"
+            ]
+         }
+      }
+   }
+}
+~~~
+
+{% endbeta %}
 
 ### Change Password
 {:.api .api-operation}
@@ -5509,21 +5844,22 @@ The Authentication API leverages the [JSON HAL](http://tools.ietf.org/html/draft
 
 An authentication or recovery transaction has one of the following states:
 
-|-----------------------+----------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------|
-| Value                 | Description                                                                                  | Next Action                                                                                                    |
-| --------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------|
-| `PASSWORD_WARN`       | The user's password was successfully validated but is about to expire and should be changed. | POST to the `next` link relation to [change the user's password](#change-password).                            |
-| `PASSWORD_EXPIRED`    | The user's password was successfully validated but is expired.                               | POST to the `next` link relation to [change the user's expired password](#change-password).                    |
-| `RECOVERY`            | The user has requested a recovery token to reset their password or unlock their account.     | POST to the `next` link relation to [answer the user's recovery question](#answer-recovery-question).          |
-| `RECOVERY_CHALLENGE`  | The user must verify the factor-specific recovery challenge.                                 | POST to the `verify` link relation to [verify the recovery factor](#verify-recovery-factor).                   |
-| `PASSWORD_RESET`      | The user successfully answered their recovery question and must to set a new password.       | POST to the `next` link relation to [reset the user's password](#reset-password).                              |
-| `LOCKED_OUT`          | The user account is locked; self-service unlock or admin unlock is required.                 | POST to the `unlock` link relation to perform a [self-service unlock](#unlock-account).                        |
-| `MFA_ENROLL`          | The user must select and enroll an available factor for additional verification.             | POST to the `enroll` link relation for a specific factor to [enroll the factor](#enroll-factor).               |
-| `MFA_ENROLL_ACTIVATE` | The user must activate the factor to complete enrollment.                                    | POST to the `next` link relation to [activate the factor](#activate-factor).                                   |
-| `MFA_REQUIRED`        | The user must provide additional verification with a previously enrolled factor.             | POST to the `verify` link relation for a specific factor to [provide additional verification](#verify-factor). |
-| `MFA_CHALLENGE`       | The user must verify the factor-specific challenge.                                          | POST to the `verify` link relation to [verify the factor](#verify-factor).                                     |
-| `SUCCESS`             | The transaction has completed successfully                                                   |                                                                                                                |
-|-----------------------+----------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------|
+|-----------------------+----------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------|
+| Value                 | Description                                                                                  | Next Action                                                                                                          |
+| --------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------|
+| `UNAUTHENTICATED`     | User tried to access protected resource (ex: an app) but user is not authenticated           | POST to the `next` link relation to [authenticate user credentials](#primary-authentication-with-public-application).|
+| `PASSWORD_WARN`       | The user's password was successfully validated but is about to expire and should be changed. | POST to the `next` link relation to [change the user's password](#change-password).                                  |
+| `PASSWORD_EXPIRED`    | The user's password was successfully validated but is expired.                               | POST to the `next` link relation to [change the user's expired password](#change-password).                          |
+| `RECOVERY`            | The user has requested a recovery token to reset their password or unlock their account.     | POST to the `next` link relation to [answer the user's recovery question](#answer-recovery-question).                |
+| `RECOVERY_CHALLENGE`  | The user must verify the factor-specific recovery challenge.                                 | POST to the `verify` link relation to [verify the recovery factor](#verify-recovery-factor).                         |
+| `PASSWORD_RESET`      | The user successfully answered their recovery question and must to set a new password.       | POST to the `next` link relation to [reset the user's password](#reset-password).                                    |
+| `LOCKED_OUT`          | The user account is locked; self-service unlock or admin unlock is required.                 | POST to the `unlock` link relation to perform a [self-service unlock](#unlock-account).                              |
+| `MFA_ENROLL`          | The user must select and enroll an available factor for additional verification.             | POST to the `enroll` link relation for a specific factor to [enroll the factor](#enroll-factor).                     |
+| `MFA_ENROLL_ACTIVATE` | The user must activate the factor to complete enrollment.                                    | POST to the `next` link relation to [activate the factor](#activate-factor).                                         |
+| `MFA_REQUIRED`        | The user must provide additional verification with a previously enrolled factor.             | POST to the `verify` link relation for a specific factor to [provide additional verification](#verify-factor).       |
+| `MFA_CHALLENGE`       | The user must verify the factor-specific challenge.                                          | POST to the `verify` link relation to [verify the factor](#verify-factor).                                           |
+| `SUCCESS`             | The transaction has completed successfully                                                   |                                                                                                                      |
+|-----------------------+----------------------------------------------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------|
 
 You advance the authentication or recovery transaction to the next state by posting a request with a valid [state token](#state-token) to the the `next` link relation published in the [JSON HAL links object](#links-object) for the response.
 
